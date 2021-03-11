@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useReducer, useState } from 'react'
 
 import { produce } from 'immer'
 import styled from 'styled-components'
@@ -26,6 +26,7 @@ type Action =
       operator: Operator
     }
   | { type: 'compute' }
+  | { type: 'clear' }
 
 type CalcState = {
   a: number
@@ -34,40 +35,63 @@ type CalcState = {
   result: number | null
 }
 
-const reducer: React.Reducer<CalcState, Action> = (state, action) => {
+// state je stav calccu
+// action je provedená akce, např. napsané číslo, = nebo operátor
+const calcReducer: React.Reducer<CalcState, Action> = (state, action) => {
   return produce(state, (draft) => {
-    const { a, b, operator, result } = draft
-
     switch (action.type) {
       case 'typeDigit': {
         const digit = action.digit
 
-        if (operator != null) {
-          if (b != null) {
-            if (Math.log10(b) <= 8) draft.b = b * 10 + digit
-          } else {
-            draft.b = digit
+        {
+          const { result } = draft
+          if (result) {
+            draft.result = null
+            draft.operator = null
+            draft.b = null
           }
-        } else {
-          if (a != null) {
-            if (result) draft.result = null
-            if (Math.log10(a) <= 8) draft.a = a * 10 + digit
+        }
+        {
+          const { a, b, operator, result } = draft
+          if (operator != null) {
+            if (b) {
+              if (Math.log10(b) <= 8) draft.b = b * 10 + digit
+            } else {
+              draft.b = digit
+            }
           } else {
-            draft.a = digit
+            if (a) {
+              if (result) draft.result = null
+              if (Math.log10(a) <= 8) draft.a = a * 10 + digit
+            } else {
+              draft.a = digit
+            }
           }
         }
         break
       }
       case 'typeOperator': {
+        const { result } = draft
+        if (result) draft.a = result
+        draft.result = null
         draft.operator = action.operator
         break
       }
       case 'compute': {
+        const { operator } = draft
         if (operator != null) {
+          if (draft.b == null) draft.b = draft.a
           const { a, b, operator, result } = draft
-          draft.result = operator!.compute(result ?? a, result ?? b ?? a)
-          draft.b = null
+          draft.result = operator!.compute(result ?? a, b!)
+          draft.a = 0
         }
+        break
+      }
+      case 'clear': {
+        draft.a = 0
+        draft.operator = null
+        draft.b = null
+        draft.result = null
         break
       }
     }
@@ -138,48 +162,16 @@ const Table = styled.table`
 `
 
 const Calc = () => {
-  const [a, setA] = useState<number>(0)
-  const [operator, setOperator] = useState<Operator | null>(null)
-  const [b, setB] = useState<number | null>(null)
-  const [result, setResult] = useState<number | null>(null)
+  const [{ a, operator, b, result }, dispatch] = useReducer(calcReducer, { a: 0 } as CalcState)
 
-  // 7, napíšu 8 => 78 (7 * 10 + 8)
   const typeNumber = (digit: Digit) => {
-    if (operator != null) {
-      if (b != null) {
-        if (Math.log10(b) <= 8) setB(b * 10 + digit)
-      } else {
-        setB(digit)
-      }
-    } else {
-      if (a != null) {
-        if (result) setResult(null)
-        if (Math.log10(a) <= 8) setA(a * 10 + digit)
-      } else {
-        setA(digit)
-      }
-    }
+    dispatch({ type: 'typeDigit', digit })
   }
-
   const typeOperator = (operator: Operator) => {
-    setOperator(operator)
+    dispatch({ type: 'typeOperator', operator })
   }
-
-  const clear = () => {
-    setA(0)
-    setB(null)
-    setOperator(null)
-    setResult(null)
-  }
-
-  const compute = () => {
-    if (operator != null) {
-      console.log({ a, b, operator, result })
-      result && setA(() => result)
-      setResult(operator.compute(a, b ?? a))
-      setB(null)
-    }
-  }
+  const compute = () => dispatch({ type: 'compute' })
+  const clear = () => dispatch({ type: 'clear' })
 
   return (
     <Table>
