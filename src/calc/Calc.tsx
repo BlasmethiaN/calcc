@@ -10,12 +10,6 @@ const Wrap = ({ children }: { children: React.ReactNode }) => (
   <div style={{ backgroundColor: 'red' }}>{children}</div>
 )
 
-enum ActionType {
-  TYPE_NUMBER,
-  TYPE_OPERATOR,
-  COMPUTE,
-}
-
 type Action =
   | {
       type: 'typeDigit'
@@ -43,36 +37,35 @@ const calcReducer: React.Reducer<CalcState, Action> = (state, action) => {
       case 'typeDigit': {
         const digit = action.digit
 
-        {
-          const { result } = draft
-          if (result) {
-            draft.result = null
-            draft.operator = null
-            draft.b = null
-          }
+        if (draft.result) {
+          draft.result = null
+          draft.operator = null
+          draft.b = null
         }
-        {
-          const { a, b, operator, result } = draft
-          if (operator != null) {
-            if (b) {
-              if (Math.log10(b) <= 8) draft.b = b * 10 + digit
-            } else {
-              draft.b = digit
-            }
+
+        const { a, b, operator, result } = draft
+        if (operator != null) {
+          if (b) {
+            if (Math.log10(b) <= 8) draft.b = b * 10 + digit
           } else {
-            if (a) {
-              if (result) draft.result = null
-              if (Math.log10(a) <= 8) draft.a = a * 10 + digit
-            } else {
-              draft.a = digit
-            }
+            draft.b = digit
+          }
+        } else {
+          if (a) {
+            if (result) draft.result = null
+            if (Math.log10(a) <= 8) draft.a = a * 10 + digit
+          } else {
+            draft.a = digit
           }
         }
         break
       }
       case 'typeOperator': {
         const { result } = draft
-        if (result) draft.a = result
+        if (result) {
+          draft.a = result
+          draft.b = null
+        }
         draft.result = null
         draft.operator = action.operator
         break
@@ -95,6 +88,8 @@ const calcReducer: React.Reducer<CalcState, Action> = (state, action) => {
         break
       }
     }
+
+    console.log(JSON.stringify(draft))
   })
 }
 
@@ -139,11 +134,16 @@ const Td = styled.td<{ noHover?: boolean }>`
   color: #000;
   background-color: #ff85c0;
   text-align: center;
-  user-select: none;
-  cursor: pointer;
   border: 1px solid black;
   border-radius: 3px;
   transition: 0.1s;
+
+  ${({ noHover }) =>
+    !noHover &&
+    `
+      user-select: none;
+      cursor: pointer;
+      `}
 
   &:hover {
     ${({ noHover }) => !noHover && `background-color: #f759ab;`}
@@ -173,12 +173,20 @@ const Calc = () => {
   const compute = () => dispatch({ type: 'compute' })
   const clear = () => dispatch({ type: 'clear' })
 
+  const display = useMemo(() => {
+    if (result != null) return result
+    let display = '' + a
+    if (operator != null) display += operator.char
+    if (b) display += b
+    return display
+  }, [a, operator, b, result])
+
   return (
     <Table>
       <tbody>
         <tr>
           <Td noHover colSpan={4}>
-            {result ? result : `${a ?? ''} ${operator?.char ?? ''} ${b ?? ''}`}
+            {display}
           </Td>
         </tr>
         <tr>
